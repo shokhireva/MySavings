@@ -52,23 +52,29 @@
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
   font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 .app {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
+  min-height: 100dvh;
   padding-bottom: 100px;
+  overflow-x: hidden;
 }
 
 /* Hero header */
 .hero {
+  position: relative;
+  z-index: 1;
   background: linear-gradient(135deg, #0d9488 0%, #06b6d4 50%, #0891b2 100%);
   padding: 2rem 1.5rem 2.25rem;
   border-radius: 0 0 28px 28px;
@@ -99,7 +105,10 @@ body {
 
 /* Summary cards */
 .summary {
+  position: relative;
+  z-index: 2;
   margin: 0 1rem 1.5rem;
+  margin-top: 1rem;
   padding: 0 0.25rem;
 }
 
@@ -561,6 +570,8 @@ body {
   justify-content: center;
   z-index: 100;
   padding: 1rem;
+  min-width: 0;
+  overflow-x: hidden;
   animation: fadeIn 0.2s ease;
 }
 
@@ -575,6 +586,8 @@ body {
   padding: 1.5rem;
   max-width: 400px;
   width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--border);
   animation: slideUp 0.25s ease;
@@ -603,11 +616,14 @@ body {
   font-size: 0.9rem;
   font-weight: 500;
   color: var(--text);
+  min-width: 0;
 }
 
 .modal input {
   display: block;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin-top: 0.4rem;
   padding: 0.65rem 0.9rem;
   border: 1px solid var(--border);
@@ -616,6 +632,11 @@ body {
   font-family: var(--font);
   background: var(--bg);
   color: var(--text);
+}
+
+.modal input[type="date"] {
+  max-width: 100%;
+  min-width: 0;
 }
 
 .modal input:focus {
@@ -1052,6 +1073,17 @@ body {
   padding: 2rem 1rem 1rem;
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+/* Mobile-specific fixes */
+@media (max-width: 479px) {
+  .hero {
+    padding: 1.5rem 1rem 2rem;
+  }
+
+  .summary {
+    margin-top: 1.25rem;
+  }
 }
 
 /* Responsive */
