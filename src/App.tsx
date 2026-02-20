@@ -1,59 +1,267 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
+import { useState, useEffect, useCallback } from "react";
+import type { Goal } from "./types";
+import { loadGoals, saveGoals } from "./storage";
 import "./App.css";
 
-// Tauri invoke works only in desktop app; in browser we use a fallback
-async function greet(name: string): Promise<string> {
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke("greet", { name });
-  } catch {
-    return `Hello, ${name || "stranger"}! (web version)`;
-  }
+function generateId() {
+  return crypto.randomUUID?.() ?? Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+function formatMoney(n: number) {
+  return new Intl.NumberFormat("ru-RU", {
+    style: "decimal",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(n);
+}
 
-  async function handleGreet() {
-    setGreetMsg(await greet(name));
-  }
+export default function App() {
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [showAddGoal, setShowAddGoal] = useState(false);
+  const [addAmountGoalId, setAddAmountGoalId] = useState<string | null>(null);
+  const [addAmountValue, setAddAmountValue] = useState("");
+
+  const reload = useCallback(() => {
+    setGoals(loadGoals());
+  }, []);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const updateGoals = (next: Goal[]) => {
+    setGoals(next);
+    saveGoals(next);
+  };
+
+  const totalSaved = goals
+    .filter((g) => !g.isSpent)
+    .reduce((sum, g) => sum + g.currentAmount, 0);
+
+  const totalTarget = goals
+    .filter((g) => !g.isSpent)
+    .reduce((sum, g) => sum + g.targetAmount, 0);
+
+  const addGoal = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const name = (fd.get("name") as string)?.trim();
+    const targetAmount = Number((fd.get("targetAmount") as string) || 0);
+    const targetDate = (fd.get("targetDate") as string) || undefined;
+    if (!name || targetAmount <= 0) return;
+
+    const goal: Goal = {
+      id: generateId(),
+      name,
+      targetAmount,
+      currentAmount: 0,
+      targetDate: targetDate || undefined,
+      isSpent: false,
+      createdAt: new Date().toISOString(),
+    };
+    updateGoals([...goals, goal]);
+    setShowAddGoal(false);
+    e.currentTarget.reset();
+  };
+
+  const addToGoal = (goalId: string) => {
+    const v = Number(addAmountValue?.replace(/\s/g, "") || 0);
+    if (v <= 0) return;
+
+    const next = goals.map((g) =>
+      g.id === goalId ? { ...g, currentAmount: g.currentAmount + v } : g
+    );
+    updateGoals(next);
+    setAddAmountGoalId(null);
+    setAddAmountValue("");
+  };
+
+  const markAsSpent = (goalId: string) => {
+    if (!confirm("Списать накопленную сумму? Она будет вычтена из общей суммы.")) return;
+    const next = goals.map((g) =>
+      g.id === goalId ? { ...g, isSpent: true } : g
+    );
+    updateGoals(next);
+  };
+
+  const deleteGoal = (goalId: string) => {
+    if (confirm("Удалить цель?")) {
+      updateGoals(goals.filter((g) => g.id !== goalId));
+    }
+  };
+
+  const activeGoals = goals.filter((g) => !g.isSpent);
+  const spentGoals = goals.filter((g) => g.isSpent);
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="app">
+      <header className="header">
+        <h1>Мои накопления</h1>
+        <p className="subtitle">Цели для накопления</p>
+      </header>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      <section className="totals">
+        <div className="total-card">
+          <span className="total-label">Всего накоплено</span>
+          <span className="total-value">{formatMoney(totalSaved)} ₽</span>
+        </div>
+        {totalTarget > 0 && (
+          <div className="total-card secondary">
+            <span className="total-label">Цель</span>
+            <span className="total-value">{formatMoney(totalTarget)} ₽</span>
+          </div>
+        )}
+      </section>
+
+      <div className="actions">
+        <button className="btn btn-primary" onClick={() => setShowAddGoal(true)}>
+          + Добавить цель
+        </button>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleGreet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      {showAddGoal && (
+        <div className="modal-overlay" onClick={() => setShowAddGoal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Новая цель</h2>
+            <form onSubmit={addGoal}>
+              <label>
+                Название
+                <input name="name" required placeholder="Например: Отпуск" />
+              </label>
+              <label>
+                Сумма для накопления (₽)
+                <input
+                  name="targetAmount"
+                  type="number"
+                  min="1"
+                  required
+                  placeholder="100000"
+                />
+              </label>
+              <label>
+                Дата (необязательно)
+                <input name="targetDate" type="date" />
+              </label>
+              <div className="modal-actions">
+                <button type="button" onClick={() => setShowAddGoal(false)}>
+                  Отмена
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Добавить
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <section className="goals-section">
+        <h2>Активные цели</h2>
+        {activeGoals.length === 0 ? (
+          <p className="empty">Нет целей. Нажмите «Добавить цель».</p>
+        ) : (
+          <ul className="goal-list">
+            {activeGoals.map((g) => (
+              <li key={g.id} className="goal-card">
+                <div className="goal-header">
+                  <span className="goal-name">{g.name}</span>
+                </div>
+                <div className="goal-progress">
+                  <div
+                    className="progress-bar"
+                    style={{
+                      width: `${Math.min(100, (g.currentAmount / g.targetAmount) * 100)}%`,
+                    }}
+                  />
+                  <span className="progress-text">
+                    {formatMoney(g.currentAmount)} / {formatMoney(g.targetAmount)} ₽
+                  </span>
+                </div>
+                {g.targetDate && (
+                  <p className="goal-date">До: {new Date(g.targetDate).toLocaleDateString("ru-RU")}</p>
+                )}
+                <div className="goal-actions">
+                  {addAmountGoalId === g.id ? (
+                    <div className="add-amount-row">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Сумма"
+                        value={addAmountValue}
+                        onChange={(e) => setAddAmountValue(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && addToGoal(g.id)}
+                      />
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() => addToGoal(g.id)}
+                      >
+                        +
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => {
+                          setAddAmountGoalId(null);
+                          setAddAmountValue("");
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() => setAddAmountGoalId(g.id)}
+                      >
+                        Добавить сумму
+                      </button>
+                      <button
+                        className="btn btn-sm btn-success"
+                        onClick={() => markAsSpent(g.id)}
+                        title="Деньги потрачены"
+                      >
+                        Потрачено
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => deleteGoal(g.id)}
+                      >
+                        Удалить
+                      </button>
+                    </>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {spentGoals.length > 0 && (
+        <section className="goals-section spent">
+          <h2>Потрачено</h2>
+          <ul className="goal-list">
+            {spentGoals.map((g) => (
+              <li key={g.id} className="goal-card spent">
+                <div className="goal-header">
+                  <span className="goal-name">{g.name}</span>
+                </div>
+                <p className="goal-amount">Было: {formatMoney(g.currentAmount)} ₽</p>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => deleteGoal(g.id)}
+                >
+                  Удалить
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <footer className="footer">
+        <p>Данные хранятся на устройстве (localStorage)</p>
+      </footer>
+    </div>
   );
 }
-
-export default App;
