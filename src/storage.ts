@@ -6,7 +6,10 @@ export function loadGoals(): Goal[] {
   try {
     const data = localStorage.getItem(GOALS_KEY);
     const raw = (data ? JSON.parse(data) : []) as Array<Goal & { categoryId?: string }>;
-    return raw.map(({ categoryId: _, ...g }) => g as Goal);
+    return raw.map(({ categoryId: _, ...g }) => ({
+      ...g,
+      history: g.history ?? [],
+    })) as Goal[];
   } catch {
     return [];
   }
